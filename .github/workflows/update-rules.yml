@@ -26,14 +26,10 @@ jobs:
       - name: Create scripts directory
         run: mkdir -p scripts
       
-      - name: Create conversion script
+      - name: Create conversion scripts
         run: |
-          cat > scripts/convert-rules.js << 'SCRIPT_EOL'
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
-
-// 转换Surge规则为Clash规则
+          # 创建surge-to-clash.js
+          cat > scripts/surge-to-clash.js << 'SCRIPT_EOL'
 function convertSurgeRuleToClash(surgeRule) {
   // 忽略注释和空行
   if (surgeRule.trim().startsWith('#') || surgeRule.trim() === '') {
@@ -54,7 +50,6 @@ function convertSurgeRuleToClash(surgeRule) {
   return null;
 }
 
-// 转换Surge规则集为Clash规则集
 function convertSurgeRulesToClash(surgeRules) {
   const lines = surgeRules.split('\n');
   let header = [];
@@ -96,22 +91,133 @@ function convertSurgeRulesToClash(surgeRules) {
   return clashRules.join('\n');
 }
 
+module.exports = {
+  convertSurgeRulesToClash
+};
+SCRIPT_EOL
+          
+          # 创建convert-rules.js
+          cat > scripts/convert-rules.js << 'SCRIPT_EOL'
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+const { convertSurgeRulesToClash } = require('./surge-to-clash');
+
 // 规则集列表
 const ruleSets = [
+  // AI相关规则
   { name: 'AI', path: 'Rules/AI/AI.list' },
   { name: 'OpenAI', path: 'Rules/OpenAI/OpenAI.list' },
-  { name: 'GitHub', path: 'Rules/GitHub/GitHub.list' },
+  { name: 'Gemini', path: 'Rules/Gemini/Gemini.list' },
+  { name: 'Copilot', path: 'Rules/Copilot/Copilot.list' },
+  
+  // 科技公司
   { name: 'Google', path: 'Rules/Google/Google.list' },
   { name: 'Microsoft', path: 'Rules/Microsoft/Microsoft.list' },
-  { name: 'Telegram', path: 'Rules/Telegram/Telegram.list' },
+  { name: 'GitHub', path: 'Rules/GitHub/GitHub.list' },
+  { name: 'Apple', path: 'Rules/Apple/Apple.list' },
+  
+  // 流媒体
   { name: 'Netflix', path: 'Rules/Netflix/Netflix.list' },
+  { name: 'Disney', path: 'Rules/Disney/Disney.list' },
   { name: 'YouTube', path: 'Rules/YouTube/YouTube.list' },
+  { name: 'Spotify', path: 'Rules/Spotify/Spotify.list' },
+  { name: 'HBO', path: 'Rules/HBO/HBO.list' },
+  { name: 'Hulu', path: 'Rules/Hulu/Hulu.list' },
+  
+  // 社交媒体
+  { name: 'Telegram', path: 'Rules/Telegram/Telegram.list' },
+  { name: 'Discord', path: 'Rules/Discord/Discord.list' },
+  { name: 'Instagram', path: 'Rules/Instagram/Instagram.list' },
+  { name: 'Facebook', path: 'Rules/Facebook/Facebook.list' },
+  { name: 'X', path: 'Rules/X/X.list' },
+  { name: 'TikTok', path: 'Rules/TikTok/TikTok.list' },
+  { name: 'Weibo', path: 'Rules/Weibo/Weibo.list' },
+  
+  // 游戏相关
+  { name: 'Games', path: 'Rules/Games/Games.list' },
+  { name: 'Xbox', path: 'Rules/Xbox/Xbox.list' },
+  { name: 'Riot', path: 'Rules/Riot/Riot.list' },
+  
+  // 广告拦截
+  { name: 'AdRules', path: 'Rules/AdRules/AdRules.list' },
+  { name: 'BlockAds', path: 'Rules/BlockAds/BlockAds.list' },
+  { name: 'anti-AD', path: 'Rules/anti-AD/anti-AD.list' },
+  
+  // 基础规则
   { name: 'Global', path: 'Rules/Global/Global.list' },
-  { name: 'Mainland', path: 'Rules/Mainland/Mainland.list' }
+  { name: 'Mainland', path: 'Rules/Mainland/Mainland.list' },
+  { name: 'ASNChina', path: 'Rules/ASNChina/ASNChina.list' },
+  { name: 'ChinaDownloadCDN', path: 'Rules/ChinaDownloadCDN/ChinaDownloadCDN.list' }
 ];
 
 // GitHub仓库基础URL
 const baseUrl = 'https://raw.githubusercontent.com/mist-whisper/Surge/refs/heads/master/'\;
+
+// 下载文件
+async function downloadFile(url) {
+  try {
+    const response = await axios.get(url);
+    return response.data;
+  } catch (error) {
+    console.error(`Error downloading ${url}: ${error.message}`);
+    throw error;
+  }
+}
+
+// 处理单个规则集
+async function processRuleSet(ruleSet) {
+  try {
+    console.log(`Processing ${ruleSet.name}...`);
+    
+    // 下载Surge规则集
+    const url = baseUrl + ruleSet.path;
+    const surgeRules = await downloadFile(url);
+    
+    // 转换为Clash规则集
+    const clashRules = convertSurgeRulesToClash(surgeRules);
+    
+    // 添加规则集元数据
+    const now = new Date();
+    const formattedDate = now.toISOString().split('T')[0];
+    const metadata = [
+      `# NAME: ${ruleSet.name}`,
+      `# AUTHOR: MinjeongEom (converted from mist-whisper/Surge)`,
+      `# UPDATED: ${formattedDate}`,
+      `# DESCRIPTION: Clash规则集，由Surge规则集自动转换`,
+      `# SOURCE: https://github.com/mist-whisper/Surge/blob/master/${ruleSet.path}`,
+      `# CONVERTER: https://github.com/MinjeongEomA/clash-rules`,
+      ``
+    ].join('\n');
+    
+    const finalContent = clashRules.startsWith('#') 
+      ? clashRules.replace(/^(#[^\n]*\n)+/, metadata) 
+      : metadata + clashRules;
+    
+    // 创建规则集目录
+    const dirName = path.dirname(ruleSet.path).replace('Rules/', '');
+    const ruleDir = path.join('.', dirName);
+    
+    if (!fs.existsSync(ruleDir)) {
+      fs.mkdirSync(ruleDir, { recursive: true });
+    }
+    
+    // 保存Clash规则集
+    const outputPath = path.join(ruleDir, `${ruleSet.name}.yaml`);
+    fs.writeFileSync(outputPath, finalContent);
+    
+    console.log(`Converted ${ruleSet.name} successfully.`);
+    return {
+      name: ruleSet.name,
+      directory: dirName,
+      path: outputPath,
+      content: finalContent
+    };
+  } catch (err) {
+    console.error(`Error processing ${ruleSet.name}:`, err.message);
+    return null;
+  }
+}
 
 // 主函数
 async function main() {
@@ -120,118 +226,32 @@ async function main() {
   const results = [];
   for (const ruleSet of ruleSets) {
     try {
-      console.log(`Processing ${ruleSet.name}...`);
-      
-      // 下载Surge规则集
-      const url = baseUrl + ruleSet.path;
-      const response = await axios.get(url);
-      const surgeRules = response.data;
-      
-      // 转换为Clash规则集
-      const clashRules = convertSurgeRulesToClash(surgeRules);
-      
-      // 添加规则集元数据
-      const now = new Date();
-      const formattedDate = now.toISOString().split('T')[0];
-      const metadata = [
-        `# NAME: ${ruleSet.name}`,
-        `# AUTHOR: MinjeongEom (converted from mist-whisper/Surge)`,
-        `# UPDATED: ${formattedDate}`,
-        `# DESCRIPTION: Clash规则集，由Surge规则集自动转换`,
-        `# SOURCE: https://github.com/mist-whisper/Surge/blob/master/${ruleSet.path}`,
-        `# CONVERTER: https://github.com/MinjeongEomA/clash-rules`,
-        ``
-      ].join('\n');
-      
-      const finalContent = clashRules.startsWith('#') 
-        ? clashRules.replace(/^(#[^\n]*\n)+/, metadata) 
-        : metadata + clashRules;
-      
-      // 创建规则集目录
-      const dirName = path.dirname(ruleSet.path).replace('Rules/', '');
-      const ruleDir = path.join('.', dirName);
-      
-      if (!fs.existsSync(ruleDir)) {
-        fs.mkdirSync(ruleDir, { recursive: true });
+      const result = await processRuleSet(ruleSet);
+      if (result) {
+        results.push(result);
       }
-      
-      // 保存Clash规则集
-      const outputPath = path.join(ruleDir, `${ruleSet.name}.yaml`);
-      fs.writeFileSync(outputPath, finalContent);
-      
-      console.log(`Converted ${ruleSet.name} successfully.`);
-      results.push({
-        name: ruleSet.name,
-        directory: dirName,
-        path: outputPath,
-        content: finalContent
-      });
-    } catch (err) {
-      console.error(`Error processing ${ruleSet.name}:`, err.message);
+    } catch (error) {
+      console.error(`Failed to process ${ruleSet.name}: ${error.message}`);
+      // 继续处理其他规则集
     }
   }
   
   console.log(`Converted ${results.length} rule sets.`);
   
-  // 更新README.md
-  const readme = `# Clash Rules
-
-这个仓库包含了自动从[mist-whisper/Surge](https://github.com/mist-whisper/Surge)转换的Clash规则集。
-
-最后更新时间: ${new Date().toISOString().split('T')[0]}
-
-## 规则集列表
-
-${ruleSets.map(r => `- [${r.name}](${r.path.replace('Rules/', '').replace('.list', '.yaml')})`).join('\n')}
-
-## 使用方法
-
-在Clash配置中，可以通过以下方式引用这些规则集：
-
-\`\`\`yaml
-rule-providers:
-  ai:
-    type: http
-    behavior: classical
-    url: https://raw.githubusercontent.com/MinjeongEomA/clash-rules/main/AI/AI.yaml
-    path: ./ruleset/ai.yaml
-    interval: 86400
-\`\`\`
-
-然后在规则中引用：
-
-\`\`\`yaml
-rules:
-  - RULE-SET,ai,PROXY
-\`\`\`
-
-## 在mihomo party中使用
-
-在mihomo party配置中，可以通过以下方式引用这些规则集：
-
-\`\`\`javascript
-// 添加AI规则集
-providers["ai"] = {
-  "behavior": "classical",
-  "url": \`https://raw.githubusercontent.com/MinjeongEomA/clash-rules/main/AI/AI.yaml\`,
-  "path": \`./ruleset/ai.yaml\`,
-  "interval": 86400
-};
-\`\`\`
-
-然后在规则中引用：
-
-\`\`\`javascript
-"RULE-SET,ai,🤖智能助理",
-\`\`\`
-
-## 自动更新
-
-这个仓库每天自动从Surge规则集更新，确保规则始终是最新的。
-`;
-  
-  fs.writeFileSync('README.md', readme);
-  console.log('Updated README.md');
+  // 更新README.md中的日期
+  try {
+    const readmePath = 'README.md';
+    if (fs.existsSync(readmePath)) {
+      let readme = fs.readFileSync(readmePath, 'utf8');
+      const now = new Date();
+      const formattedDate = now.toISOString().split('T')[0];
+      readme = readme.replace(/最后更新时间: .*/, `最后更新时间: ${formattedDate}`);
+      fs.writeFileSync(readmePath, readme);
+      console.log('Updated README.md date');
+    }
+  } catch (error) {
+    console.error(`Error updating README.md: ${error.message}`);
+  }
 }
 
 // 执行主函数
@@ -248,6 +268,5 @@ SCRIPT_EOL
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          git add .
-          git commit -m "Update rules $(date +'%Y-%m-%d')" || echo "No changes to commit"
-          git push
+          git add -A
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update rules - $(date +'%Y-%m-%d')" && git push)

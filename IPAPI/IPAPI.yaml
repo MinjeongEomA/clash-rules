@@ -1,0 +1,9 @@
+# NAME: IPAPI
+# AUTHOR: MinjeongEom (converted from mist-whisper/Surge)
+# UPDATED: 2025-05-19
+# DESCRIPTION: Clash规则集，由Surge规则集自动转换
+# SOURCE: https://github.com/mist-whisper/Surge/blob/master/Rules/IPAPI/IPAPI.list
+# CONVERTER: https://github.com/MinjeongEomA/clash-rules-converter
+
+payload:
+  - DOMAIN,ip-api.com

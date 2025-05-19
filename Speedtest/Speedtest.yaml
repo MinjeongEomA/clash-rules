@@ -1,0 +1,13 @@
+# NAME: Speedtest
+# AUTHOR: MinjeongEom (converted from mist-whisper/Surge)
+# UPDATED: 2025-05-19
+# DESCRIPTION: Clash规则集，由Surge规则集自动转换
+# SOURCE: https://github.com/mist-whisper/Surge/blob/master/Rules/Speedtest/Speedtest.list
+# CONVERTER: https://github.com/MinjeongEomA/clash-rules-converter
+
+payload:
+  - DOMAIN-SUFFIX,fast.com
+  - DOMAIN-SUFFIX,ooklaserver.net
+  - DOMAIN-SUFFIX,speed.cloudflare.com
+  - DOMAIN-SUFFIX,speed.dler.io
+  - DOMAIN-KEYWORD,speedtest
