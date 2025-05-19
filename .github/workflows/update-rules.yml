@@ -1,0 +1,253 @@
+name: Update Clash Rules
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每天 UTC 00:00 运行（北京时间 08:00）
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  update-rules:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: |
+          npm init -y
+          npm install axios
+      
+      - name: Create scripts directory
+        run: mkdir -p scripts
+      
+      - name: Create conversion script
+        run: |
+          cat > scripts/convert-rules.js << 'SCRIPT_EOL'
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+
+// 转换Surge规则为Clash规则
+function convertSurgeRuleToClash(surgeRule) {
+  // 忽略注释和空行
+  if (surgeRule.trim().startsWith('#') || surgeRule.trim() === '') {
+    return surgeRule;
+  }
+
+  // 处理基本规则类型
+  if (surgeRule.startsWith('DOMAIN,') ||
+      surgeRule.startsWith('DOMAIN-SUFFIX,') ||
+      surgeRule.startsWith('DOMAIN-KEYWORD,') ||
+      surgeRule.startsWith('IP-CIDR,') ||
+      surgeRule.startsWith('IP-CIDR6,') ||
+      surgeRule.startsWith('GEOIP,')) {
+    return surgeRule;
+  }
+
+  // 其他不支持的规则类型
+  return null;
+}
+
+// 转换Surge规则集为Clash规则集
+function convertSurgeRulesToClash(surgeRules) {
+  const lines = surgeRules.split('\n');
+  let header = [];
+  let rules = [];
+  
+  // 提取头部注释
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('#')) {
+      header.push(lines[i]);
+    } else if (lines[i].trim() !== '') {
+      break;
+    }
+  }
+  
+  // 转换规则
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line === '' || line.startsWith('#')) {
+      continue;
+    }
+    
+    const clashRule = convertSurgeRuleToClash(line);
+    if (clashRule !== null) {
+      rules.push(clashRule);
+    }
+  }
+  
+  // 构建Clash规则集
+  const clashRules = [
+    ...header,
+    '',
+    'payload:'
+  ];
+  
+  rules.forEach(rule => {
+    clashRules.push(`  - ${rule}`);
+  });
+  
+  return clashRules.join('\n');
+}
+
+// 规则集列表
+const ruleSets = [
+  { name: 'AI', path: 'Rules/AI/AI.list' },
+  { name: 'OpenAI', path: 'Rules/OpenAI/OpenAI.list' },
+  { name: 'GitHub', path: 'Rules/GitHub/GitHub.list' },
+  { name: 'Google', path: 'Rules/Google/Google.list' },
+  { name: 'Microsoft', path: 'Rules/Microsoft/Microsoft.list' },
+  { name: 'Telegram', path: 'Rules/Telegram/Telegram.list' },
+  { name: 'Netflix', path: 'Rules/Netflix/Netflix.list' },
+  { name: 'YouTube', path: 'Rules/YouTube/YouTube.list' },
+  { name: 'Global', path: 'Rules/Global/Global.list' },
+  { name: 'Mainland', path: 'Rules/Mainland/Mainland.list' }
+];
+
+// GitHub仓库基础URL
+const baseUrl = 'https://raw.githubusercontent.com/mist-whisper/Surge/refs/heads/master/'\;
+
+// 主函数
+async function main() {
+  console.log('Starting conversion...');
+  
+  const results = [];
+  for (const ruleSet of ruleSets) {
+    try {
+      console.log(`Processing ${ruleSet.name}...`);
+      
+      // 下载Surge规则集
+      const url = baseUrl + ruleSet.path;
+      const response = await axios.get(url);
+      const surgeRules = response.data;
+      
+      // 转换为Clash规则集
+      const clashRules = convertSurgeRulesToClash(surgeRules);
+      
+      // 添加规则集元数据
+      const now = new Date();
+      const formattedDate = now.toISOString().split('T')[0];
+      const metadata = [
+        `# NAME: ${ruleSet.name}`,
+        `# AUTHOR: MinjeongEom (converted from mist-whisper/Surge)`,
+        `# UPDATED: ${formattedDate}`,
+        `# DESCRIPTION: Clash规则集，由Surge规则集自动转换`,
+        `# SOURCE: https://github.com/mist-whisper/Surge/blob/master/${ruleSet.path}`,
+        `# CONVERTER: https://github.com/MinjeongEomA/clash-rules`,
+        ``
+      ].join('\n');
+      
+      const finalContent = clashRules.startsWith('#') 
+        ? clashRules.replace(/^(#[^\n]*\n)+/, metadata) 
+        : metadata + clashRules;
+      
+      // 创建规则集目录
+      const dirName = path.dirname(ruleSet.path).replace('Rules/', '');
+      const ruleDir = path.join('.', dirName);
+      
+      if (!fs.existsSync(ruleDir)) {
+        fs.mkdirSync(ruleDir, { recursive: true });
+      }
+      
+      // 保存Clash规则集
+      const outputPath = path.join(ruleDir, `${ruleSet.name}.yaml`);
+      fs.writeFileSync(outputPath, finalContent);
+      
+      console.log(`Converted ${ruleSet.name} successfully.`);
+      results.push({
+        name: ruleSet.name,
+        directory: dirName,
+        path: outputPath,
+        content: finalContent
+      });
+    } catch (err) {
+      console.error(`Error processing ${ruleSet.name}:`, err.message);
+    }
+  }
+  
+  console.log(`Converted ${results.length} rule sets.`);
+  
+  // 更新README.md
+  const readme = `# Clash Rules
+
+这个仓库包含了自动从[mist-whisper/Surge](https://github.com/mist-whisper/Surge)转换的Clash规则集。
+
+最后更新时间: ${new Date().toISOString().split('T')[0]}
+
+## 规则集列表
+
+${ruleSets.map(r => `- [${r.name}](${r.path.replace('Rules/', '').replace('.list', '.yaml')})`).join('\n')}
+
+## 使用方法
+
+在Clash配置中，可以通过以下方式引用这些规则集：
+
+\`\`\`yaml
+rule-providers:
+  ai:
+    type: http
+    behavior: classical
+    url: https://raw.githubusercontent.com/MinjeongEomA/clash-rules/main/AI/AI.yaml
+    path: ./ruleset/ai.yaml
+    interval: 86400
+\`\`\`
+
+然后在规则中引用：
+
+\`\`\`yaml
+rules:
+  - RULE-SET,ai,PROXY
+\`\`\`
+
+## 在mihomo party中使用
+
+在mihomo party配置中，可以通过以下方式引用这些规则集：
+
+\`\`\`javascript
+// 添加AI规则集
+providers["ai"] = {
+  "behavior": "classical",
+  "url": \`https://raw.githubusercontent.com/MinjeongEomA/clash-rules/main/AI/AI.yaml\`,
+  "path": \`./ruleset/ai.yaml\`,
+  "interval": 86400
+};
+\`\`\`
+
+然后在规则中引用：
+
+\`\`\`javascript
+"RULE-SET,ai,🤖智能助理",
+\`\`\`
+
+## 自动更新
+
+这个仓库每天自动从Surge规则集更新，确保规则始终是最新的。
+`;
+  
+  fs.writeFileSync('README.md', readme);
+  console.log('Updated README.md');
+}
+
+// 执行主函数
+main().catch(err => {
+  console.error('Conversion failed:', err);
+  process.exit(1);
+});
+SCRIPT_EOL
+      
+      - name: Run conversion script
+        run: node scripts/convert-rules.js
+      
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add .
+          git commit -m "Update rules $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git push
