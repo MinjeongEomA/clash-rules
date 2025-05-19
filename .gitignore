@@ -1,0 +1,8 @@
+# 忽略大型规则文件
+AdRules/AdRules.yaml
+anti-AD/anti-AD.yaml
+
+# 其他常见忽略文件
+.DS_Store
+node_modules/
+*.log
